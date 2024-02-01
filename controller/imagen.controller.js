@@ -1,69 +1,48 @@
+const { v4:uuidv4 } = require('uuid');
+const path = require('path');
+const multer = require('multer');
 
-  import { pool, queries } from '../database';
-  const uuid = require('uuid');
+
+  const diskStorage = multer.diskStorage({
+  destination: path.join(__dirname, '../images'),
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExtension = path.extname(file.originalname);
+    const finalFileName = uniqueName + fileExtension;
+    
+    cb(null, finalFileName);
+  }
+});
+export const fileUpload = multer({
+  storage: diskStorage // Corregir el nombre del storage aquí
+}).single('image');
+
+  export const postImages = (req,res) => {
+     req.getConnection((err, conn) => {
+      if (err) return res.status(500).send('Server error' + err);
   
-  export const getAllImagen = async (req, res) => {
-    try {
-      const [result] = await pool.execute(queries.getAllImagen);
-      res.json(result);
-    } catch (error) {
-      res.status(500).send(error.message);
-    }
-  };
+      const { originalname, filename } = req.file;
+      const imagePath = path.join(__dirname, '../images', filename);
+      const uploadDate = new Date(); // Puedes ajustar esto según tus necesidades
   
-  export const getImagenById = async (req, res) => {
-    const { id } = req.params;
+      // Obtener el personaId del cuerpo de la solicitud
+      const personaId = req.body.personaId;
   
-    try {
-      const [result] = await pool.execute(queries.getImagenById, [id]);
-      if (result.length === 0) {
-        return res.status(404).json({ msg: 'Imagen not found' });
-      }
-      res.json(result[0]);
-    } catch (error) {
-      res.status(500).send(error.message);
-    }
-  };
+      // Insertar datos de la imagen en la base de datos
+      const imagenData = {
+        imagenId: uuidv4(), // Generar un nuevo ID
+        imagenPath: imagePath,
+        uploadDate: uploadDate,
+        tags: req.body.tags, // Ajusta esto según tu formulario
+        personaId: personaId, // Utilizar el personaId obtenido
+      };
   
-  export const createNewImagen = async (req, res) => {
-    const { imagenPath, uploadDate, tags, personaId } = req.body;
-    const imagenId = uuid.v4();
-    if (!imagenPath || !uploadDate || !tags || !personaId) {
-      return res.status(400).json({ msg: 'Bad Request. Please fill all fields' });
-    }
+      conn.query('INSERT INTO imagen SET ?', imagenData, (err) => {
+        if (err) return res.status(500).send('Server error' + err);
   
-    try {
-      await pool.execute(queries.createNewImagen, [imagenPath, uploadDate, tags, personaId]);
-      res.json({ imagenId });
-    } catch (error) {
-      res.status(500).send(error.message);
-    }
-  };
+       const id = imagenData.imagenId
   
-  export const updateImagen = async (req, res) => {
-    const { id } = req.params;
-    const { imagenPath, uploadDate, tags, personaId } = req.body;
-  
-    if (!imagenPath || !uploadDate || !tags || !personaId) {
-      return res.status(400).json({ msg: 'Bad Request. Please fill all fields' });
-    }
-  
-    try {
-      await pool.execute(queries.updateImagen, [imagenPath, uploadDate, tags, personaId, id]);
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).send(error.message);
-    }
-  };
-  
-  export const deleteImagen = async (req, res) => {
-    const { id } = req.params;
-  
-    try {
-      await pool.execute(queries.deleteImagen, [id]);
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).send(error.message);
-    }
-  };
-  
+        res.json({id});
+      });
+    });
+  } 
