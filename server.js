@@ -3,7 +3,7 @@ const mysql = require('mysql'); // Cambiado a mysql
 const myconn = require('express-myconnection');
 const app = express();
 const cors = require('cors')
-
+const path = require('path');
 app.use(
   myconn(mysql, {
     host: "127.0.0.1",
@@ -13,6 +13,7 @@ app.use(
     database: 'justicia',
   })
 );
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(express.json());
 app.use(cors())
