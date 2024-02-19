@@ -1,186 +1,69 @@
 const { v4: uuidv4 } = require("uuid");
+const { pool } = require("../database/conections");
+const { queries } = require("../database/queries");
+
 
 const postNewPerson = async (req, res) => {
-  req.getConnection(async (err, conn) => {
-    if (err) {
-      console.error("Error en la conexión a la base de datos:", err);
-      return res
-        .status(500)
-        .json({ error: "Error en el servidor al conectar a la base de datos" });
-    }
-
-    console.log("Datos recibidos:", req.body);
     const { nombre, apellido, direccion, identidad } = req.body;
-
-    const personaData = {
-      personaId: uuidv4(), // Generar un nuevo ID
-      nombre: nombre,
-      apellido: apellido,
-      direccion: direccion,
-      identidad: identidad,
-    };
+    const personaId = uuidv4();
+    const [result] = await pool.execute(queries.getPersonaByIdentity, [identidad]);
+   if(result.length == 1) return res.status(409).json({msg:'Ya Existe este Id'})
     try {
-      const existingPerson = await getPersonIdentity(req, identidad);
-      if (existingPerson) {
-        return res.status(409).json({ message: "La persona ya existe" });
-      }
-      await conn.query("INSERT INTO persona SET ?", personaData);
-
-      const personaId = personaData.personaId;
-      console.log(personaId);
-      res.json({ personaId: personaId });
+      await  pool.execute(queries.createNewPersona,[personaId, nombre,apellido,direccion,identidad]);
+      res.json({personaId});
     } catch (error) {
-      console.error("Error al interactuar con la base de datos:", error);
-      res
-        .status(500)
-        .json({
-          error: "Error en el servidor al interactuar con la base de datos",
-        });
+    res.status(500).send(error.message)
     }
-  });
 };
 
-const getAllPersons = (req, res) => {
-  req.getConnection((err, conn) => {
-    if (err) {
-      console.error("Error en la conexión a la base de datos:", err);
-      return res
-        .status(500)
-        .json({ error: "Error en el servidor al conectar a la base de datos" });
-    }
+const getAllPersons = async (req, res) => {
+  try{
+const [result] = await pool.execute(queries.getAllPersona);
+res.json(result);
 
-    conn.query("SELECT * FROM persona", (err, results) => {
-      if (err) {
-        console.error("Error al obtener datos de la base de datos:", err);
-        return res
-          .status(500)
-          .json({
-            error: "Error en el servidor al obtener datos de la base de datos",
-          });
-      }
-
-      res.json(results);
-    });
-  });
+  }catch(err){res.status(500).send(err.message)}
+ 
 };
-const updatePerson = (req, res) => {
-  const personaId = req.params.id;
-  const updatedData = req.body;
-
-  req.getConnection((err, conn) => {
-    if (err) {
-      console.error("Error en la conexión a la base de datos:", err);
-      return res
-        .status(500)
-        .json({ error: "Error en el servidor al conectar a la base de datos" });
-    }
-
-    conn.query(
-      "UPDATE persona SET ? WHERE personaId = ?",
-      [updatedData, personaId],
-      (err) => {
-        if (err) {
-          console.error("Error al actualizar en la base de datos:", err);
-          return res
-            .status(500)
-            .json({
-              error: "Error en el servidor al actualizar en la base de datos",
-            });
-        }
-
-        res.json({ message: "Persona actualizada exitosamente" });
-      }
-    );
-  });
+const updatePerson = async (req, res) => {
+  const { personaId, nombre, apellido, direccion, identidad } = req.body;
+  if (!personaId || !nombre || !identidad) {
+    return res.status(400).json({ msg: 'Bad Request: Faltan Campos' });
+  }
+  try {
+    await pool.execute(queries.updatePersona, [nombre, apellido, direccion, identidad, personaId]);
+    res.json({ personaId });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
 };
-const deletePerson = (req, res) => {
-  const personaId = req.params.id;
 
-  req.getConnection((err, conn) => {
-    if (err) {
-      console.error("Error en la conexión a la base de datos:", err);
-      return res
-        .status(500)
-        .json({ error: "Error en el servidor al conectar a la base de datos" });
-    }
-
-    conn.query(
-      "DELETE FROM persona WHERE personaId = ?",
-      [personaId],
-      (err) => {
-        if (err) {
-          console.error("Error al eliminar en la base de datos:", err);
-          return res
-            .status(500)
-            .json({
-              error: "Error en el servidor al eliminar en la base de datos",
-            });
-        }
-
-        res.json({ message: "Persona eliminada exitosamente" });
-      }
-    );
-  });
+const deletePerson = async (req, res) => {
+  const { personaId } = req.params;
+  if (!personaId) {
+    return res.status(400).json({ msg: 'Bad Request: Se requiere personaId' });
+  }
+  try {
+    await pool.execute(queries.deletePersona, [personaId]);
+    res.json({ msg: 'Persona eliminada exitosamente' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
 };
-const getPersonByIdentity = (req, res) => {
-  const identidad = req.params.identidad;
-  req.getConnection((err, conn) => {
-    if (err) {
-      console.error("Error en la conexión a la base de datos:", err);
-      return res
-        .status(500)
-        .json({ error: "Error en el servidor al conectar a la base de datos" });
+
+const getPersonByIdentity = async (req, res) => {
+  const { identidad } = req.params;
+  if (!identidad) {
+    return res.status(400).json({ msg: 'Bad Request: Se requiere identidad' });
+  }
+  try {
+    const [result] = await pool.execute(queries.getPersonaByIdentity, [identidad]);
+    if (result.length === 0) {
+      return res.status(404).json({ msg: 'Persona no encontrada' });
     }
-
-    conn.query(
-      "SELECT * FROM persona WHERE identidad = ?",
-      [identidad],
-      (err, results) => {
-        if (err) {
-          console.error("Error al obtener datos de la base de datos:", err);
-          return res
-            .status(500)
-            .json({
-              error:
-                "Error en el servidor al obtener datos de la base de datos",
-            });
-        }
-
-        if (results.length === 0) {
-          return res.status(404).json({ error: "Persona no encontrada" });
-        }
-
-        res.json(results[0]);
-      }
-    );
-  });
-};
-const getPersonIdentity = async (req, identidad) => {
-  return new Promise((resolve, reject) => {
-    req.getConnection((err, conn) => {
-      if (err) {
-        console.error("Error en la conexión a la base de datos:", err);
-        reject("Error en el servidor al conectar a la base de datos");
-      }
-
-      conn.query(
-        "SELECT * FROM persona WHERE identidad = ?",
-        [identidad],
-        (err, results) => {
-          if (err) {
-            console.error("Error al obtener datos de la base de datos:", err);
-            reject("Error al obtener datos de la base de datos");
-          }
-
-          if (results.length === 0) {
-            resolve(false);
-          } else {
-            resolve(true);
-          }
-        }
-      );
-    });
-  });
+    res.json(result[0]);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
 };
 
 module.exports = {
